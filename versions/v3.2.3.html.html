@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+    <title>行程日曆助手 Mobile v3.2.3</title>
+    
+    <!-- 外部函式庫 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- Google API -->
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+    
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #334155;
+            --cyan: #06b6d4;
+            --cyan-glow: rgba(6, 182, 212, 0.3);
+            --purple: #a855f7;
+            --purple-glow: rgba(168, 85, 247, 0.3);
+            --emerald: #10b981;
+            --emerald-glow: rgba(16, 185, 129, 0.3);
+            --orange: #f59e0b;
+            --red: #ef4444;
+            --gold: #fbbf24;
+            --text-light: #e2e8f0;
+            --text-dim: #94a3b8;
+            --text-muted: #64748b;
+            --border: #334155;
+            --nav-height: 70px;
+            --header-height: 60px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; overflow: hidden; touch-action: manipulation; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', Roboto, sans-serif; background: var(--bg-dark); color: var(--text-light); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+        .app-container { height: 100%; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+        .app-header { height: var(--header-height); background: linear-gradient(135deg, var(--cyan) 0%, var(--purple) 100%); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex-shrink: 0; }
+        .app-logo { display: flex; align-items: center; gap: 10px; font-size: 1.2em; font-weight: 700; }
+        .header-actions { display: flex; gap: 8px; }
+        .header-btn { width: 40px; height: 40px; border: none; background: rgba(255,255,255,0.2); border-radius: 12px; color: white; font-size: 1.3em; display: flex; align-items: center; justify-content: center; }
+        .app-content { flex: 1; overflow: hidden; position: relative; }
+        .page { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow-y: auto; padding: 16px; padding-bottom: calc(var(--nav-height) + 20px); display: none; -webkit-overflow-scrolling: touch; }
+        .page.active { display: block; }
+        .bottom-nav { height: var(--nav-height); background: var(--bg-card); border-top: 1px solid var(--border); display: flex; flex-shrink: 0; }
+        .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: none; background: transparent; color: var(--text-muted); padding: 8px 0; position: relative; }
+        .nav-item::before { content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 0; height: 3px; background: var(--cyan); border-radius: 0 0 3px 3px; transition: width 0.3s; }
+        .nav-item.active { color: var(--cyan); }
+        .nav-item.active::before { width: 30px; }
+        .nav-icon { font-size: 1.5em; }
+        .nav-label { font-size: 0.75em; font-weight: 500; }
+        .card { background: var(--bg-card); border-radius: 16px; padding: 20px; margin-bottom: 16px; border: 1px solid var(--border); }
+        .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .card-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4em; }
+        .card-icon.cyan { background: var(--cyan-glow); }
+        .card-icon.purple { background: var(--purple-glow); }
+        .card-icon.emerald { background: var(--emerald-glow); }
+        .card-title { font-size: 1.1em; font-weight: 600; }
+        .card-subtitle { font-size: 0.85em; color: var(--text-dim); }
+        .stats-row { display: flex; gap: 12px; margin-bottom: 20px; }
+        .stat-card { flex: 1; background: var(--bg-card); border-radius: 14px; padding: 16px; text-align: center; border: 1px solid var(--border); }
+        .stat-value { font-size: 1.8em; font-weight: 700; color: var(--cyan); }
+        .stat-label { font-size: 0.8em; color: var(--text-muted); }
+        .quick-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
+        .quick-action { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 20px 16px; text-align: center; transition: all 0.2s; }
+        .quick-action:active { transform: scale(0.98); background: var(--bg-card-hover); }
+        .quick-action-icon { font-size: 2em; margin-bottom: 8px; }
+        .quick-action-text { font-size: 0.9em; font-weight: 500; }
+        .input-group { margin-bottom: 16px; }
+        .input-label { display: block; font-size: 0.9em; font-weight: 500; color: var(--text-dim); margin-bottom: 8px; }
+        .input-field { width: 100%; padding: 14px 16px; background: var(--bg-dark); border: 2px solid var(--border); border-radius: 12px; color: var(--text-light); font-size: 1em; -webkit-appearance: none; }
+        .input-field:focus { outline: none; border-color: var(--cyan); }
+        .input-field::placeholder { color: var(--text-muted); }
+        textarea.input-field { min-height: 150px; resize: vertical; line-height: 1.6; }
+        .input-row { display: flex; gap: 8px; }
+        .input-row .input-field { flex: 1; }
+        .input-btn { width: 50px; height: 50px; border: none; background: var(--bg-card-hover); border-radius: 12px; color: var(--text-dim); font-size: 1.2em; flex-shrink: 0; }
+        .btn { width: 100%; padding: 16px 24px; border: none; border-radius: 14px; font-size: 1.05em; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.2s; }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary { background: linear-gradient(135deg, var(--cyan) 0%, var(--purple) 100%); color: white; }
+        .btn-secondary { background: linear-gradient(135deg, var(--emerald) 0%, #059669 100%); color: white; }
+        .btn-outline { background: transparent; border: 2px solid var(--cyan); color: var(--cyan); }
+        .btn-danger { background: var(--red); color: white; }
+        .btn.authorized { background: linear-gradient(135deg, var(--emerald) 0%, #059669 100%); color: white; cursor: default; }
+        .btn.disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-sm { padding: 12px 16px; font-size: 0.95em; }
+        .action-row { display: flex; gap: 12px; margin-top: 16px; }
+        .action-row .btn { flex: 1; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 16px; background: var(--bg-dark); padding: 6px; border-radius: 12px; }
+        .tab { flex: 1; padding: 12px 8px; border: none; background: transparent; color: var(--text-muted); font-size: 0.9em; font-weight: 500; border-radius: 8px; }
+        .tab.active { background: var(--cyan); color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .upload-area { border: 2px dashed var(--border); border-radius: 16px; padding: 30px 20px; text-align: center; background: rgba(6, 182, 212, 0.05); }
+        .upload-area:active { border-color: var(--cyan); background: rgba(6, 182, 212, 0.1); }
+        .upload-area input { display: none; }
+        .upload-icon { font-size: 3em; margin-bottom: 12px; }
+        .upload-text { font-size: 1em; font-weight: 500; color: var(--cyan); }
+        .upload-hint { font-size: 0.85em; color: var(--text-muted); margin-top: 8px; }
+        .reminder-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .reminder-option { display: flex; align-items: center; gap: 10px; padding: 14px; background: var(--bg-dark); border: 2px solid var(--border); border-radius: 12px; }
+        .reminder-option.checked { border-color: var(--cyan); background: var(--cyan-glow); }
+        .reminder-option input { display: none; }
+        .reminder-checkbox { width: 24px; height: 24px; border: 2px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: transparent; }
+        .reminder-option.checked .reminder-checkbox { background: var(--cyan); border-color: var(--cyan); color: white; }
+        .reminder-label { font-size: 0.95em; }
+        .event-list { margin-top: 20px; }
+        .event-item { background: var(--bg-dark); border-radius: 14px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--cyan); }
+        .event-title { font-size: 1.05em; font-weight: 600; margin-bottom: 8px; }
+        .event-meta { font-size: 0.9em; color: var(--text-dim); }
+        .event-meta-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .day-badge { display: inline-block; background: linear-gradient(135deg, var(--cyan) 0%, var(--purple) 100%); color: white; padding: 2px 10px; border-radius: 6px; font-size: 0.8em; margin-left: 8px; }
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+        .empty-icon { font-size: 3em; margin-bottom: 12px; opacity: 0.5; }
+        .toast { position: fixed; bottom: calc(var(--nav-height) + 20px); left: 50%; transform: translateX(-50%) translateY(100px); background: var(--bg-card); color: var(--text-light); padding: 14px 24px; border-radius: 12px; font-size: 0.95em; font-weight: 500; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3); z-index: 1000; opacity: 0; transition: all 0.3s ease; max-width: calc(100% - 40px); text-align: center; border: 1px solid var(--border); }
+        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        .toast.success { border-color: var(--emerald); background: rgba(16, 185, 129, 0.2); }
+        .toast.error { border-color: var(--red); background: rgba(239, 68, 68, 0.2); }
+        .toast.info { border-color: var(--cyan); background: rgba(6, 182, 212, 0.2); }
+        .spinner { width: 24px; height: 24px; border: 3px solid rgba(255, 255, 255, 0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); z-index: 1000; display: none; align-items: flex-end; }
+        .modal-overlay.show { display: flex; }
+        .modal-content { background: var(--bg-card); width: 100%; max-height: 85vh; border-radius: 24px 24px 0 0; overflow: hidden; }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px; border-bottom: 1px solid var(--border); }
+        .modal-title { font-size: 1.2em; font-weight: 600; }
+        .modal-close { width: 36px; height: 36px; border: none; background: var(--bg-dark); color: var(--text-dim); border-radius: 10px; font-size: 1.2em; }
+        .modal-body { padding: 20px; max-height: calc(85vh - 80px); overflow-y: auto; }
+        .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid var(--border); }
+        .toggle-row:last-child { border-bottom: none; }
+        .toggle-title { font-weight: 500; }
+        .toggle-desc { font-size: 0.85em; color: var(--text-muted); }
+        .toggle-switch { width: 52px; height: 30px; background: var(--border); border-radius: 15px; position: relative; transition: all 0.3s; }
+        .toggle-switch::after { content: ''; position: absolute; width: 24px; height: 24px; background: white; border-radius: 50%; top: 3px; left: 3px; transition: all 0.3s; }
+        .toggle-switch.active { background: var(--cyan); }
+        .toggle-switch.active::after { left: 25px; }
+        .image-preview { width: 100%; max-height: 200px; object-fit: contain; border-radius: 12px; margin-top: 12px; display: none; }
+        .image-preview.show { display: block; }
+        .file-badge { display: inline-flex; align-items: center; gap: 8px; background: var(--emerald-glow); border: 1px solid var(--emerald); color: var(--emerald); padding: 8px 14px; border-radius: 10px; font-size: 0.9em; margin-top: 12px; }
+        .accordion-item { background: var(--bg-dark); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+        .accordion-header { width: 100%; padding: 16px; border: none; background: transparent; color: var(--text-light); font-size: 1em; font-weight: 500; text-align: left; display: flex; align-items: center; justify-content: space-between; }
+        .accordion-body { display: none; padding: 0 16px 16px; color: var(--text-dim); font-size: 0.9em; line-height: 1.7; }
+        .accordion-item.open .accordion-body { display: block; }
+        .accordion-icon { transition: transform 0.3s; }
+        .accordion-item.open .accordion-icon { transform: rotate(180deg); }
+        .splash-screen { position: fixed; inset: 0; background: radial-gradient(ellipse at center, #0a1628 0%, #050d1a 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 99999; overflow: hidden; transition: opacity 0.8s ease, visibility 0.8s ease; }
+        .splash-screen.hide { opacity: 0; visibility: hidden; }
+        .splash-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px); background-size: 30px 30px; animation: gridPulse 3s ease-in-out infinite; }
+        @keyframes gridPulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.7; } }
+        .hex-bg { position: absolute; width: 100%; height: 100%; opacity: 0.1; background: radial-gradient(circle at 20% 30%, var(--cyan) 0%, transparent 40%), radial-gradient(circle at 80% 70%, var(--purple) 0%, transparent 40%); animation: hexFloat 8s ease-in-out infinite; }
+        @keyframes hexFloat { 0%, 100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.1) rotate(5deg); } }
+        .splash-particles { position: absolute; inset: 0; overflow: hidden; }
+        .splash-particle { position: absolute; width: 3px; height: 3px; background: var(--cyan); border-radius: 50%; box-shadow: 0 0 10px var(--cyan), 0 0 20px var(--cyan); animation: particleRise 5s ease-in-out infinite; }
+        .splash-particle:nth-child(1) { left: 10%; animation-delay: 0s; }
+        .splash-particle:nth-child(2) { left: 20%; animation-delay: 0.8s; background: var(--purple); box-shadow: 0 0 10px var(--purple); }
+        .splash-particle:nth-child(3) { left: 30%; animation-delay: 1.6s; }
+        .splash-particle:nth-child(4) { left: 40%; animation-delay: 0.4s; background: var(--emerald); box-shadow: 0 0 10px var(--emerald); }
+        .splash-particle:nth-child(5) { left: 50%; animation-delay: 1.2s; }
+        .splash-particle:nth-child(6) { left: 60%; animation-delay: 2s; background: var(--purple); box-shadow: 0 0 10px var(--purple); }
+        .splash-particle:nth-child(7) { left: 70%; animation-delay: 0.6s; }
+        .splash-particle:nth-child(8) { left: 80%; animation-delay: 1.4s; background: var(--emerald); box-shadow: 0 0 10px var(--emerald); }
+        .splash-particle:nth-child(9) { left: 90%; animation-delay: 2.2s; }
+        @keyframes particleRise { 0% { transform: translateY(100vh) scale(0); opacity: 0; } 10% { opacity: 1; transform: scale(1); } 90% { opacity: 1; } 100% { transform: translateY(-100vh) scale(0.5); opacity: 0; } }
+        .splash-logo-container { position: relative; width: 160px; height: 160px; display: flex; align-items: center; justify-content: center; margin-bottom: 30px; }
+        .splash-ring { position: absolute; border: 2px solid transparent; border-radius: 50%; animation: ringRotate linear infinite; }
+        .splash-ring-1 { width: 160px; height: 160px; border-top-color: var(--cyan); border-right-color: var(--cyan); animation-duration: 3s; filter: drop-shadow(0 0 8px var(--cyan)); }
+        .splash-ring-2 { width: 130px; height: 130px; border-bottom-color: var(--purple); border-left-color: var(--purple); animation-duration: 2.5s; animation-direction: reverse; filter: drop-shadow(0 0 8px var(--purple)); }
+        .splash-ring-3 { width: 100px; height: 100px; border-top-color: var(--emerald); animation-duration: 2s; filter: drop-shadow(0 0 8px var(--emerald)); }
+        @keyframes ringRotate { to { transform: rotate(360deg); } }
+        .splash-logo-inner { width: 70px; height: 70px; background: linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(168, 85, 247, 0.2) 100%); border: 2px solid var(--cyan); border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 36px; animation: logoSpin 2s ease-in-out, logoPulse 2s ease-in-out infinite 2s; box-shadow: 0 0 30px rgba(6, 182, 212, 0.5), inset 0 0 20px rgba(6, 182, 212, 0.1); z-index: 10; }
+        @keyframes logoSpin { 0% { transform: rotateY(0deg) scale(0.3); opacity: 0; } 50% { transform: rotateY(180deg) scale(1.1); } 100% { transform: rotateY(360deg) scale(1); opacity: 1; } }
+        @keyframes logoPulse { 0%, 100% { box-shadow: 0 0 30px rgba(6, 182, 212, 0.5), inset 0 0 20px rgba(6, 182, 212, 0.1); border-color: var(--cyan); } 50% { box-shadow: 0 0 50px rgba(6, 182, 212, 0.8), 0 0 80px rgba(168, 85, 247, 0.4), inset 0 0 30px rgba(6, 182, 212, 0.2); border-color: var(--purple); } }
+        .orbit-particle { position: absolute; width: 6px; height: 6px; background: var(--cyan); border-radius: 50%; box-shadow: 0 0 10px var(--cyan); }
+        .orbit-particle:nth-child(1) { animation: orbit1 3s linear infinite; }
+        .orbit-particle:nth-child(2) { animation: orbit2 2.5s linear infinite; background: var(--purple); box-shadow: 0 0 10px var(--purple); }
+        .orbit-particle:nth-child(3) { animation: orbit3 2s linear infinite; background: var(--emerald); box-shadow: 0 0 10px var(--emerald); }
+        @keyframes orbit1 { 0% { transform: rotate(0deg) translateX(80px) rotate(0deg); } 100% { transform: rotate(360deg) translateX(80px) rotate(-360deg); } }
+        @keyframes orbit2 { 0% { transform: rotate(120deg) translateX(65px) rotate(-120deg); } 100% { transform: rotate(480deg) translateX(65px) rotate(-480deg); } }
+        @keyframes orbit3 { 0% { transform: rotate(240deg) translateX(50px) rotate(-240deg); } 100% { transform: rotate(600deg) translateX(50px) rotate(-600deg); } }
+        .splash-title { font-size: 22px; font-weight: 700; color: var(--cyan); text-shadow: 0 0 20px rgba(6, 182, 212, 0.8); opacity: 0; animation: textFadeUp 0.8s ease forwards 1s; text-align: center; letter-spacing: 2px; }
+        .splash-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 8px; opacity: 0; animation: textFadeUp 0.8s ease forwards 1.3s; letter-spacing: 4px; }
+        .splash-version { font-size: 10px; color: var(--purple); margin-top: 6px; opacity: 0; animation: textFadeUp 0.8s ease forwards 1.5s; }
+        @keyframes textFadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .splash-progress { width: 180px; height: 3px; background: rgba(6, 182, 212, 0.1); border-radius: 2px; margin-top: 35px; overflow: hidden; opacity: 0; animation: textFadeUp 0.8s ease forwards 1.7s; border: 1px solid rgba(6, 182, 212, 0.2); }
+        .splash-progress-bar { width: 0%; height: 100%; background: linear-gradient(90deg, var(--cyan), var(--purple), var(--emerald)); border-radius: 2px; animation: progressFill 2s ease forwards 1.9s; box-shadow: 0 0 10px var(--cyan); }
+        @keyframes progressFill { 0% { width: 0%; } 100% { width: 100%; } }
+        .splash-status { font-size: 11px; color: var(--text-dim); margin-top: 15px; opacity: 0; animation: textFadeUp 0.8s ease forwards 2s, statusBlink 1s ease-in-out infinite 2s; }
+        @keyframes statusBlink { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+        .scan-line { position: absolute; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, var(--cyan), transparent); top: 0; animation: scanMove 3s linear infinite; opacity: 0.3; }
+        @keyframes scanMove { 0% { top: 0; } 100% { top: 100%; } }
+    </style>
+</head>
+<body>
+    <!-- 🌟 冷光科技風開機動畫 -->
+    <div class="splash-screen" id="splashScreen">
+        <div class="splash-grid"></div>
+        <div class="hex-bg"></div>
+        <div class="scan-line"></div>
+        <div class="splash-particles">
+            <div class="splash-particle"></div><div class="splash-particle"></div><div class="splash-particle"></div>
+            <div class="splash-particle"></div><div class="splash-particle"></div><div class="splash-particle"></div>
+            <div class="splash-particle"></div><div class="splash-particle"></div><div class="splash-particle"></div>
+        </div>
+        <div class="splash-logo-container">
+            <div class="splash-ring splash-ring-1"></div>
+            <div class="splash-ring splash-ring-2"></div>
+            <div class="splash-ring splash-ring-3"></div>
+            <div class="splash-logo-inner">📅</div>
+            <div class="orbit-particle"></div>
+            <div class="orbit-particle"></div>
+            <div class="orbit-particle"></div>
+        </div>
+        <div class="splash-title">行程日曆助手</div>
+        <div class="splash-subtitle">SCHEDULE CALENDAR</div>
+        <div class="splash-version">Mobile v3.2.3</div>
+        <div class="splash-progress"><div class="splash-progress-bar"></div></div>
+        <div class="splash-status">INITIALIZING SYSTEM...</div>
+    </div>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="app-logo"><span>📅</span><span>行程助手</span></div>
+            <div class="header-actions">
+                <button class="header-btn" id="helpBtn">❓</button>
+                <button class="header-btn" id="settingsBtn">⚙️</button>
+            </div>
+        </header>
+        <main class="app-content">
+            <!-- 首頁 -->
+            <div class="page active" id="page-home">
+                <div class="stats-row">
+                    <div class="stat-card"><div class="stat-value" id="eventCount">0</div><div class="stat-label">待匯入事件</div></div>
+                    <div class="stat-card"><div class="stat-value" id="fileCount">0</div><div class="stat-label">已上傳檔案</div></div>
+                </div>
+                <div class="quick-actions">
+                    <div class="quick-action" id="qa-text"><div class="quick-action-icon">✏️</div><div class="quick-action-text">文字輸入</div></div>
+                    <div class="quick-action" id="qa-file"><div class="quick-action-icon">📄</div><div class="quick-action-text">上傳檔案</div></div>
+                    <div class="quick-action" id="qa-image"><div class="quick-action-icon">📸</div><div class="quick-action-text">拍照辨識</div></div>
+                    <div class="quick-action" id="qa-api"><div class="quick-action-icon">🔑</div><div class="quick-action-text">API 設定</div></div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><div class="card-icon cyan">📋</div><div><div class="card-title">待處理事件</div><div class="card-subtitle">解析完成後會顯示在這裡</div></div></div>
+                    <div id="homeEventList"><div class="empty-state"><div class="empty-icon">📭</div><div>尚無待處理事件</div></div></div>
+                </div>
+            </div>
+            <!-- 輸入頁 -->
+            <div class="page" id="page-input">
+                <div class="card">
+                    <div class="card-header"><div class="card-icon purple">📝</div><div><div class="card-title">輸入活動資訊</div><div class="card-subtitle">選擇輸入方式</div></div></div>
+                    <div class="tabs">
+                        <button class="tab active" id="tab-text">✏️ 文字</button>
+                        <button class="tab" id="tab-file">📄 檔案</button>
+                        <button class="tab" id="tab-image">📸 圖片</button>
+                    </div>
+                    <div class="tab-content active" id="content-text">
+                        <div class="input-group">
+                            <label class="input-label">貼上活動時程表 <span style="color: var(--cyan); font-size: 0.85em;">（支援研習/畢旅/活動）</span></label>
+                            <textarea class="input-field" id="scheduleText" placeholder="範例 1 - 研習：
+114年12月25日（三）14:00-16:00
+AI 教學應用工作坊
+地點：線上 Google Meet
+
+範例 2 - 畢業旅行：
+第一天 12/20（五）
+07:30 學校集合出發
+12:00 抵達九族文化村
+
+💡 支援：研習、畢旅、校外教學、活動行程"></textarea>
+                            <button class="btn btn-outline btn-sm" onclick="clearScheduleText()" style="margin-top: 10px;">🗑️ 清除文字</button>
+                        </div>
+                    </div>
+                    <div class="tab-content" id="content-file">
+                        <div class="upload-area" id="fileUploadArea">
+                            <input type="file" id="fileUpload" accept=".xlsx,.xls,.csv,.txt,.pdf">
+                            <div class="upload-icon">📁</div>
+                            <div class="upload-text">點擊上傳檔案</div>
+                            <div class="upload-hint">支援 Excel、TXT、CSV、PDF</div>
+                        </div>
+                        <div id="fileInfo" style="display: none;"><div class="file-badge"><span>✅</span><span id="fileName">檔案已載入</span></div></div>
+                    </div>
+                    <div class="tab-content" id="content-image">
+                        <div class="upload-area" id="imageUploadArea">
+                            <input type="file" id="imageUpload" accept="image/*">
+                            <div class="upload-icon">📷</div>
+                            <div class="upload-text">拍照或選擇圖片</div>
+                            <div class="upload-hint">AI OCR 智能辨識行程表</div>
+                        </div>
+                        <div class="ocr-tips" style="margin-top: 12px; padding: 12px; background: rgba(6, 182, 212, 0.1); border-radius: 12px; font-size: 0.85em; color: var(--text-dim);">
+                            <div style="margin-bottom: 6px; color: var(--cyan);">📸 OCR 辨識支援：</div>
+                            <div>• 研習通知、公文</div><div>• 畢業旅行行程表</div><div>• 校外教學通知單</div><div>• 各種活動時程表</div>
+                        </div>
+                        <img id="imagePreview" class="image-preview">
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><div class="card-icon emerald">⏰</div><div><div class="card-title">提醒設定</div><div class="card-subtitle">選擇事件提醒時間</div></div></div>
+                    <div class="reminder-grid" id="reminderGrid">
+                        <label class="reminder-option" data-value="30"><input type="checkbox" value="30"><div class="reminder-checkbox">✓</div><span class="reminder-label">30 分鐘前</span></label>
+                        <label class="reminder-option checked" data-value="60"><input type="checkbox" value="60" checked><div class="reminder-checkbox">✓</div><span class="reminder-label">1 小時前</span></label>
+                        <label class="reminder-option" data-value="120"><input type="checkbox" value="120"><div class="reminder-checkbox">✓</div><span class="reminder-label">2 小時前</span></label>
+                        <label class="reminder-option" data-value="1440"><input type="checkbox" value="1440"><div class="reminder-checkbox">✓</div><span class="reminder-label">1 天前</span></label>
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="parseBtn"><span id="parseBtnText">🚀 AI 智能解析</span><div class="spinner" id="parseSpinner"></div></button>
+                <div id="eventsPreview" class="event-list" style="display: none;"></div>
+                <div class="action-row" id="importActions" style="display: none;">
+                    <button class="btn btn-secondary" id="importCalendarBtn">🔗 匯入日曆</button>
+                    <button class="btn btn-outline" id="downloadIcsBtn">📥 下載 ICS</button>
+                </div>
+            </div>
+            <!-- LINE 頁 -->
+            <div class="page" id="page-line">
+                <div class="card">
+                    <div class="card-header"><div class="card-icon emerald">🔔</div><div><div class="card-title">LINE 提醒排程</div><div class="card-subtitle">研習自動提醒設定</div></div></div>
+                    <div class="reminder-grid" id="lineReminderGrid">
+                        <label class="reminder-option" data-value="1440"><input type="checkbox" id="reminder1Day" value="1440"><div class="reminder-checkbox">✓</div><span class="reminder-label">前 1 天</span></label>
+                        <label class="reminder-option" data-value="120"><input type="checkbox" id="reminder2Hours" value="120"><div class="reminder-checkbox">✓</div><span class="reminder-label">前 2 小時</span></label>
+                        <label class="reminder-option checked" data-value="60"><input type="checkbox" id="reminder1Hour" value="60" checked><div class="reminder-checkbox">✓</div><span class="reminder-label">前 1 小時</span></label>
+                        <label class="reminder-option" data-value="30"><input type="checkbox" id="reminder30Min" value="30"><div class="reminder-checkbox">✓</div><span class="reminder-label">前 30 分鐘</span></label>
+                    </div>
+                    <div class="action-row">
+                        <button class="btn btn-outline btn-sm" id="viewSchedulesBtn">📋 查看排程</button>
+                        <button class="btn btn-danger btn-sm" id="clearSchedulesBtn">🗑️ 清除排程</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><div class="card-icon cyan">📊</div><div><div class="card-title">設定狀態</div><div class="card-subtitle">LINE 通知設定檢查</div></div></div>
+                    <div id="lineStatusList">
+                        <div class="toggle-row"><div><div class="toggle-title">Channel Token</div><div class="toggle-desc" id="tokenStatus">未設定</div></div><span id="tokenIcon">❌</span></div>
+                        <div class="toggle-row"><div><div class="toggle-title">User ID</div><div class="toggle-desc" id="userIdStatus">未設定</div></div><span id="userIdIcon">❌</span></div>
+                        <div class="toggle-row"><div><div class="toggle-title">GAS URL</div><div class="toggle-desc" id="gasStatus">未設定</div></div><span id="gasIcon">❌</span></div>
+                        <div class="toggle-row"><div><div class="toggle-title">Secret Key</div><div class="toggle-desc" id="secretStatus">未設定</div></div><span id="secretIcon">❌</span></div>
+                    </div>
+                    <button class="btn btn-primary" id="goToSettingsBtn" style="margin-top: 16px;">⚙️ 前往設定</button>
+                </div>
+            </div>
+            <!-- 設定頁 -->
+            <div class="page" id="page-settings">
+                <div class="card">
+                    <div class="card-header"><div class="card-icon purple">🤖</div><div><div class="card-title">Gemini API</div><div class="card-subtitle">AI 智能解析（選填）</div></div></div>
+                    <div class="input-group"><label class="input-label">API Key</label><div class="input-row"><input type="password" class="input-field" id="geminiApiKey" placeholder="選填：啟用 AI 智能解析"><button class="input-btn" id="toggleGeminiKey">👁️</button></div></div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><div class="card-icon cyan">🔐</div><div><div class="card-title">Google OAuth</div><div class="card-subtitle">用於自動匯入日曆（授權保留24小時）</div></div></div>
+                    <div class="input-group"><label class="input-label">Client ID</label><div class="input-row"><input type="password" class="input-field" id="googleClientId" placeholder="輸入 Google OAuth Client ID"><button class="input-btn" id="toggleGoogleId">👁️</button></div></div>
+                    <div class="action-row" style="margin-top: 12px;">
+                        <button class="btn btn-primary btn-sm" id="googleAuthBtn" onclick="handleGoogleAuth()">🔑 授權 Google</button>
+                        <button class="btn btn-outline btn-sm" onclick="handleGoogleSignOut()">🚪 登出</button>
+                    </div>
+                    <div id="googleAuthStatus" style="margin-top: 10px; font-size: 0.85em; color: var(--text-muted);">❌ 未授權</div>
+                    <button class="btn btn-outline btn-sm" onclick="showApiDiagnostics()" style="margin-top: 12px;">🔍 API 診斷</button>
+                </div>
+                <div class="card">
+                    <div class="card-header"><div class="card-icon emerald">📱</div><div><div class="card-title">LINE 通知</div><div class="card-subtitle">研習提醒推播</div></div></div>
+                    <div class="input-group"><label class="input-label">Channel Access Token</label><div class="input-row"><input type="password" class="input-field" id="lineChannelAccessToken" placeholder="輸入 LINE Token"><button class="input-btn" id="toggleLineToken">👁️</button></div></div>
+                    <div class="input-group"><label class="input-label">User ID</label><div class="input-row"><input type="password" class="input-field" id="lineUserId" placeholder="輸入 LINE User ID"><button class="input-btn" id="toggleLineUserId">👁️</button></div></div>
+                    <div class="input-group"><label class="input-label">GAS Web App URL</label><div class="input-row"><input type="password" class="input-field" id="gasWebAppUrl" placeholder="輸入 GAS 網址"><button class="input-btn" id="toggleGasUrl">👁️</button></div></div>
+                    <div class="input-group"><label class="input-label">🔐 Secret Key</label><div class="input-row"><input type="password" class="input-field" id="gasSecretKey" placeholder="輸入安全金鑰"><button class="input-btn" id="toggleGasSecret">👁️</button></div></div>
+                    <button class="btn btn-outline btn-sm" id="testLineBtn">📤 發送測試訊息</button>
+                </div>
+                <div class="card">
+                    <div class="card-header"><div class="card-icon cyan">💾</div><div><div class="card-title">本機儲存</div><div class="card-subtitle">自動記住設定</div></div></div>
+                    <div class="toggle-row"><div><div class="toggle-title">啟用本機儲存</div><div class="toggle-desc">API 金鑰將儲存在本機</div></div><div class="toggle-switch" id="localStorageToggle"></div></div>
+                </div>
+                <button class="btn btn-danger" id="clearAllBtn" style="margin-top: 20px;">🗑️ 清除所有資料</button>
+            </div>
+        </main>
+        <nav class="bottom-nav">
+            <button class="nav-item active" data-page="home"><span class="nav-icon">🏠</span><span class="nav-label">首頁</span></button>
+            <button class="nav-item" data-page="input"><span class="nav-icon">📝</span><span class="nav-label">輸入</span></button>
+            <button class="nav-item" data-page="line"><span class="nav-icon">📱</span><span class="nav-label">LINE</span></button>
+            <button class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></button>
+        </nav>
+    </div>
+    <div class="toast" id="toast"></div>
+    <div class="modal-overlay" id="helpModal">
+        <div class="modal-content">
+            <div class="modal-header"><div class="modal-title">📚 幫助中心</div><button class="modal-close" id="closeHelpBtn">✕</button></div>
+            <div class="modal-body">
+                <div class="accordion-item open"><button class="accordion-header"><span>🚀 如何開始使用？</span><span class="accordion-icon">▼</span></button><div class="accordion-body">1. 點擊「輸入」頁面<br>2. 選擇文字、檔案或圖片輸入<br>3. 貼上或上傳研習資訊<br>4. 點擊「AI 智能解析」<br>5. 確認解析結果後匯入日曆</div></div>
+                <div class="accordion-item"><button class="accordion-header"><span>🔑 Gemini API 設定</span><span class="accordion-icon">▼</span></button><div class="accordion-body">1. 前往 Google AI Studio<br>2. 點擊「Get API key」<br>3. 建立或選擇專案<br>4. 複製 API Key 貼到設定頁面</div></div>
+                <div class="accordion-item"><button class="accordion-header"><span>📱 LINE 通知設定</span><span class="accordion-icon">▼</span></button><div class="accordion-body">1. 前往 LINE Developers Console<br>2. 建立 Messaging API Channel<br>3. 取得 Channel Access Token<br>4. 取得您的 User ID<br>5. 部署 Google Apps Script</div></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        var parsedEvents = [];
+        var uploadedFilesContentArray = [];
+        var uploadedImagesArray = [];
+        var activeInputTab = 'text';
+        var localStorageEnabled = false;
+        var STORAGE_PREFIX = 'workshop_mobile_';
+        var DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
+        var SCOPES = 'https://www.googleapis.com/auth/calendar.events';
+        var tokenClient = null;
+        var gapiInited = false;
+        var gisInited = false;
+        var accessToken = null;
+        var TOKEN_CACHE_KEY = STORAGE_PREFIX + 'google_token';
+        var TOKEN_EXPIRY_KEY = STORAGE_PREFIX + 'google_token_expiry';
+        var TOKEN_CACHE_DURATION = 24 * 60 * 60 * 1000;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 App v3.2.3 初始化中...');
+            initNavigation(); initTabs(); initButtons(); initReminders(); initUploads(); initToggles(); initModals(); loadSettings();
+            console.log('✅ App 初始化完成！');
+        });
+
+        function initNavigation() {
+            document.querySelectorAll('.nav-item').forEach(function(item) {
+                item.addEventListener('click', function() { switchToPage(this.getAttribute('data-page')); });
+            });
+        }
+
+        function switchToPage(pageName) {
+            document.querySelectorAll('.page').forEach(function(page) { page.classList.remove('active'); });
+            var targetPage = document.getElementById('page-' + pageName);
+            if (targetPage) targetPage.classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(function(item) {
+                item.classList.remove('active');
+                if (item.getAttribute('data-page') === pageName) item.classList.add('active');
+            });
+            if (pageName === 'line') updateLineStatus();
+        }
+
+        function initTabs() {
+            document.querySelectorAll('.tabs .tab').forEach(function(tab) {
+                tab.addEventListener('click', function() { switchInputTab(this.id.replace('tab-', '')); });
+            });
+        }
+
+        function switchInputTab(tabName) {
+            activeInputTab = tabName;
+            document.querySelectorAll('.tabs .tab').forEach(function(tab) { tab.classList.remove('active'); });
+            document.getElementById('tab-' + tabName).classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(function(content) { content.classList.remove('active'); });
+            document.getElementById('content-' + tabName).classList.add('active');
+        }
+
+        function initButtons() {
+            document.getElementById('qa-text').addEventListener('click', function() { switchToPage('input'); switchInputTab('text'); });
+            document.getElementById('qa-file').addEventListener('click', function() { switchToPage('input'); switchInputTab('file'); });
+            document.getElementById('qa-image').addEventListener('click', function() { switchToPage('input'); switchInputTab('image'); });
+            document.getElementById('qa-api').addEventListener('click', function() { switchToPage('settings'); });
+            document.getElementById('helpBtn').addEventListener('click', function() { document.getElementById('helpModal').classList.add('show'); });
+            document.getElementById('settingsBtn').addEventListener('click', function() { switchToPage('settings'); });
+            document.getElementById('parseBtn').addEventListener('click', parseSchedule);
+            document.getElementById('importCalendarBtn').addEventListener('click', importToGoogleCalendar);
+            document.getElementById('downloadIcsBtn').addEventListener('click', downloadICS);
+            document.getElementById('viewSchedulesBtn').addEventListener('click', viewScheduledReminders);
+            document.getElementById('clearSchedulesBtn').addEventListener('click', clearAllReminders);
+            document.getElementById('goToSettingsBtn').addEventListener('click', function() { switchToPage('settings'); });
+            document.getElementById('testLineBtn').addEventListener('click', testLineNotification);
+            document.getElementById('clearAllBtn').addEventListener('click', clearAllData);
+            document.getElementById('toggleGeminiKey').addEventListener('click', function() { toggleVisibility('geminiApiKey'); });
+            document.getElementById('toggleGoogleId').addEventListener('click', function() { toggleVisibility('googleClientId'); });
+            document.getElementById('toggleLineToken').addEventListener('click', function() { toggleVisibility('lineChannelAccessToken'); });
+            document.getElementById('toggleLineUserId').addEventListener('click', function() { toggleVisibility('lineUserId'); });
+            document.getElementById('toggleGasUrl').addEventListener('click', function() { toggleVisibility('gasWebAppUrl'); });
+            document.getElementById('toggleGasSecret').addEventListener('click', function() { toggleVisibility('gasSecretKey'); });
+        }
+
+        function initReminders() {
+            document.querySelectorAll('.reminder-option').forEach(function(option) {
+                option.addEventListener('click', function() {
+                    var checkbox = this.querySelector('input');
+                    checkbox.checked = !checkbox.checked;
+                    this.classList.toggle('checked', checkbox.checked);
+                });
+            });
+        }
+
+        function initUploads() {
+            document.getElementById('fileUploadArea').addEventListener('click', function() { document.getElementById('fileUpload').click(); });
+            document.getElementById('fileUpload').addEventListener('change', handleFileUpload);
+            document.getElementById('imageUploadArea').addEventListener('click', function() { document.getElementById('imageUpload').click(); });
+            document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
+        }
+
+        function initToggles() { document.getElementById('localStorageToggle').addEventListener('click', toggleLocalStorage); }
+
+        function initModals() {
+            document.getElementById('closeHelpBtn').addEventListener('click', function() { document.getElementById('helpModal').classList.remove('show'); });
+            document.getElementById('helpModal').addEventListener('click', function(e) { if (e.target === this) this.classList.remove('show'); });
+            document.querySelectorAll('.accordion-header').forEach(function(header) {
+                header.addEventListener('click', function() { this.parentElement.classList.toggle('open'); });
+            });
+        }
+
+        function showToast(message, type) {
+            var toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + (type || '');
+            toast.classList.add('show');
+            setTimeout(function() { toast.classList.remove('show'); }, 3000);
+        }
+
+        function toggleVisibility(inputId) {
+            var input = document.getElementById(inputId);
+            input.type = (input.type === 'password') ? 'text' : 'password';
+        }
+
+        function handleFileUpload(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+            showToast('📄 正在讀取檔案...', 'info');
+            var reader = new FileReader();
+            if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                reader.onload = function(e) {
+                    try {
+                        var workbook = XLSX.read(e.target.result, { type: 'binary' });
+                        var content = '';
+                        workbook.SheetNames.forEach(function(name) { content += XLSX.utils.sheet_to_csv(workbook.Sheets[name]) + '\n'; });
+                        uploadedFilesContentArray.push({ name: file.name, content: content });
+                        updateFileInfo(file.name);
+                    } catch (err) { showToast('❌ Excel 讀取失敗', 'error'); }
+                };
+                reader.readAsBinaryString(file);
+            } else {
+                reader.onload = function(e) { uploadedFilesContentArray.push({ name: file.name, content: e.target.result }); updateFileInfo(file.name); };
+                reader.readAsText(file);
+            }
+        }
+
+        function updateFileInfo(fileName) {
+            document.getElementById('fileInfo').style.display = 'block';
+            document.getElementById('fileName').textContent = fileName;
+            document.getElementById('fileCount').textContent = uploadedFilesContentArray.length;
+            showToast('✅ 檔案已載入：' + fileName, 'success');
+        }
+
+        function handleImageUpload(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+            showToast('📸 正在讀取圖片...', 'info');
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                uploadedImagesArray.push(e.target.result.split(',')[1]);
+                var preview = document.getElementById('imagePreview');
+                preview.src = e.target.result;
+                preview.classList.add('show');
+                showToast('✅ 圖片已載入', 'success');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function parseSchedule() {
+            var apiKey = document.getElementById('geminiApiKey').value.trim();
+            var scheduleText = document.getElementById('scheduleText').value.trim();
+            if (activeInputTab === 'text' && !scheduleText) { showToast('⚠️ 請輸入活動資訊', 'error'); return; }
+            if (activeInputTab === 'file' && uploadedFilesContentArray.length === 0) { showToast('⚠️ 請上傳檔案', 'error'); return; }
+            if (activeInputTab === 'image' && uploadedImagesArray.length === 0) { showToast('⚠️ 請上傳圖片', 'error'); return; }
+            document.getElementById('parseBtnText').style.display = 'none';
+            document.getElementById('parseSpinner').style.display = 'block';
+            showToast('🔄 正在解析中...', 'info');
+            setTimeout(function() {
+                if (apiKey) { parseWithGemini(apiKey, scheduleText); }
+                else { handleParseResult(parseWithBuiltIn(scheduleText)); }
+            }, 500);
+        }
+
+        function convertMinguoToWestern(text) {
+            if (!text) return text;
+            var result = text;
+            result = result.replace(/(?:民國|中華民國)\s*(\d{2,3})\s*年/g, function(match, year) {
+                var minguo = parseInt(year);
+                if (minguo <= 200) { return (minguo + 1911) + '年'; }
+                return match;
+            });
+            result = result.replace(/(\d{2,3})年(\d{1,2})月/g, function(match, year, month) {
+                var yearNum = parseInt(year);
+                if (yearNum <= 200) { return (yearNum + 1911) + '年' + month + '月'; }
+                return match;
+            });
+            result = result.replace(/(\d{2,3})([\/\-])(\d{1,2})\2(\d{1,2})/g, function(match, year, sep, month, day) {
+                var yearNum = parseInt(year);
+                if (yearNum <= 200) { return (yearNum + 1911) + sep + month + sep + day; }
+                return match;
+            });
+            return result;
+        }
+
+        function fixMinguoYearInDate(dateStr, rocYear) {
+            if (!dateStr) return dateStr;
+            if (rocYear && rocYear >= 100 && rocYear <= 200) {
+                var expectedWesternYear = rocYear + 1911;
+                var match = dateStr.match(/^(\d{4})/);
+                if (match && parseInt(match[1]) !== expectedWesternYear) {
+                    dateStr = dateStr.replace(/^\d{4}/, expectedWesternYear.toString());
+                }
+            }
+            var match = dateStr.match(/^(\d{2,3})-/);
+            if (match) {
+                var yearNum = parseInt(match[1]);
+                if (yearNum >= 100 && yearNum <= 200) {
+                    dateStr = dateStr.replace(/^\d{2,3}/, (yearNum + 1911).toString());
+                }
+            }
+            return dateStr;
+        }
+
+        // 🔧 v3.2.3 強化：從原始輸入中提取西元年份
+        function extractWesternYearFromInput(text) {
+            if (!text) return null;
+            
+            // 優先匹配「YYYY年」格式（中文環境最常見）
+            var yearWithCharMatch = text.match(/(202[0-9]|2030)年/);
+            if (yearWithCharMatch) {
+                console.log('🔍 從「X年」格式提取年份:', yearWithCharMatch[1]);
+                return parseInt(yearWithCharMatch[1]);
+            }
+            
+            // 匹配日期格式：2026/1/18 或 2026-1-18
+            var dateMatch = text.match(/(202[0-9]|2030)[\/\-]\d{1,2}[\/\-]\d{1,2}/);
+            if (dateMatch) {
+                var year = dateMatch[0].match(/^(\d{4})/)[1];
+                console.log('🔍 從日期格式提取年份:', year);
+                return parseInt(year);
+            }
+            
+            // 備用：匹配獨立的年份數字（前後不是數字）
+            var standaloneMatch = text.match(/(?:^|[^0-9])(202[0-9]|2030)(?:[^0-9]|$)/);
+            if (standaloneMatch) {
+                console.log('🔍 從備用模式提取年份:', standaloneMatch[1]);
+                return parseInt(standaloneMatch[1]);
+            }
+            return null;
+        }
+
+        // 🔧 v3.2.3 強化：強制修正西元年份
+        function fixWesternYearInDate(dateStr, originalYear) {
+            if (!dateStr || !originalYear) return dateStr;
+            var match = dateStr.match(/^(\d{4})/);
+            if (match) {
+                var aiYear = parseInt(match[1]);
+                // 如果 AI 返回的年份與原始輸入不同，強制修正
+                if (aiYear !== originalYear && originalYear >= 2024 && originalYear <= 2035) {
+                    console.log('🔧 [v3.2.3] 強制修正年份: AI=' + aiYear + ' → 原始=' + originalYear);
+                    dateStr = dateStr.replace(/^\d{4}/, originalYear.toString());
+                }
+            }
+            return dateStr;
+        }
+
+        function fixCrazyYear(dateStr) {
+            if (!dateStr) return dateStr;
+            var match = dateStr.match(/^(\d+)-(\d+)-(\d+)/);
+            if (match) {
+                var yearNum = parseInt(match[1]);
+                if (yearNum > 2100) {
+                    var now = new Date();
+                    var fixed = (parseInt(match[2]) === 1) ? now.getFullYear() + 1 : now.getFullYear();
+                    return dateStr.replace(/^\d+/, fixed.toString());
+                }
+            }
+            return dateStr;
+        }
+
+        function handleParseResult(events) {
+            document.getElementById('parseBtnText').style.display = 'inline';
+            document.getElementById('parseSpinner').style.display = 'none';
+            if (events && events.length > 0) {
+                events = events.map(function(e) {
+                    if (e.startDateTime) e.startDateTime = fixCrazyYear(e.startDateTime);
+                    if (e.endDateTime) e.endDateTime = fixCrazyYear(e.endDateTime);
+                    return e;
+                });
+                parsedEvents = events;
+                displayEvents(events);
+                document.getElementById('eventsPreview').style.display = 'block';
+                document.getElementById('importActions').style.display = 'flex';
+                document.getElementById('eventCount').textContent = events.length;
+                showToast('✅ 解析成功！找到 ' + events.length + ' 個事件', 'success');
+            } else {
+                showToast('⚠️ 未找到有效的事件，請檢查輸入格式', 'error');
+            }
+        }
+
+        // 🔧 v3.2.3 核心修復：在 API 調用前提取年份並保存
+        function parseWithGemini(apiKey, scheduleText) {
+            var now = new Date();
+            var currentYear = now.getFullYear();
+            var currentMonth = now.getMonth() + 1;
+            var currentDate = now.getDate();
+
+            // 🔧 v3.2.3 修復：先從原始輸入提取年份（在任何轉換前）
+            var rawInput = '';
+            if (activeInputTab === 'text') { 
+                rawInput = scheduleText; 
+            } else if (activeInputTab === 'file') { 
+                rawInput = uploadedFilesContentArray.map(function(f) { return f.content; }).join('\n\n'); 
+            }
+            
+            // 提取並保存原始年份
+            var originalYear = extractWesternYearFromInput(rawInput);
+            console.log('📅 [v3.2.3] 原始輸入年份:', originalYear);
+            console.log('📝 [v3.2.3] 原始輸入前100字:', rawInput.substring(0, 100));
+
+            var prompt = '你是一個專業的行程表解析助手。請將以下活動資訊解析為 JSON 格式。\n\n';
+            prompt += '今天是 ' + currentYear + ' 年 ' + currentMonth + ' 月 ' + currentDate + ' 日\n\n';
+            prompt += '請輸出以下 JSON 格式（純 JSON，不要 markdown）：\n';
+            prompt += '{"events":[{"title":"標題","startDateTime":"YYYY-MM-DDTHH:MM:SS","endDateTime":"YYYY-MM-DDTHH:MM:SS","location":"地點","description":"描述"}]}\n\n';
+            prompt += '【🚨🚨🚨 最最最重要 - 絕對保留西元年份 🚨🚨🚨】\n';
+            prompt += '如果輸入包含 4 位數年份（2024、2025、2026、2027...），這是西元年，必須 100% 原封不動使用！\n';
+            prompt += '例如「2026年1月18日」→ 輸出必須是「2026-01-18」，絕對絕對不能變成 2027！\n';
+            prompt += '例如「2025年3月5日」→ 輸出必須是「2025-03-05」，絕對不能改變年份！\n';
+            prompt += '你不需要「推測」或「修正」年份，直接使用輸入中的年份！\n\n';
+            prompt += '【民國年轉換】只有當年份是 2-3 位數且 ≤ 200 時才視為民國年：\n';
+            prompt += '114年 = 2025年、115年 = 2026年、116年 = 2027年\n\n';
+            prompt += '【時間規則】\n';
+            prompt += '• 日期格式必須是 ISO 8601（YYYY-MM-DDTHH:MM:SS）\n';
+            prompt += '• 如果沒有結束時間，預設活動 2 小時\n';
+            prompt += '• 如果只有日期沒有時間，預設 08:00-17:00\n';
+
+            var content = '';
+            if (activeInputTab === 'text') { content = convertMinguoToWestern(scheduleText); }
+            else if (activeInputTab === 'file') { content = uploadedFilesContentArray.map(function(f) { return convertMinguoToWestern(f.content); }).join('\n\n'); }
+
+            var requestBody = { contents: [{ parts: [{ text: prompt + '行程內容：\n' + content }] }], generationConfig: { temperature: 0.1 } };
+
+            if (activeInputTab === 'image' && uploadedImagesArray.length > 0) {
+                var ocrPrompt = '你是一個專業的行程表 OCR 辨識助手。請仔細辨識圖片中的所有文字，並解析為行事曆事件。\n\n';
+                ocrPrompt += '今天是 ' + currentYear + ' 年 ' + currentMonth + ' 月 ' + currentDate + ' 日\n\n';
+                ocrPrompt += '請輸出 JSON 格式：{"events":[{"title":"標題","startDateTime":"YYYY-MM-DDTHH:MM:SS","endDateTime":"YYYY-MM-DDTHH:MM:SS","location":"地點","description":"描述","rocYear":識別到的民國年數字}]}\n\n';
+                ocrPrompt += '【🚨 西元年份必須原封不動保留 🚨】\n';
+                ocrPrompt += '【民國年轉換】民國年 + 1911 = 西元年：114年=2025年、115年=2026年、116年=2027年\n';
+                var parts = [{ text: ocrPrompt }];
+                uploadedImagesArray.forEach(function(img) { parts.push({ inline_data: { mime_type: 'image/jpeg', data: img } }); });
+                requestBody = { contents: [{ parts: parts }], generationConfig: { temperature: 0.1 } };
+            }
+
+            // 使用閉包保存 originalYear
+            var savedOriginalYear = originalYear;
+
+            fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody)
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data.error) throw new Error(data.error.message);
+                var text = data.candidates[0].content.parts[0].text;
+                text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                var result = JSON.parse(text);
+                var events = result.events || [];
+                
+                console.log('📅 [v3.2.3] API 回傳事件數:', events.length);
+                console.log('📅 [v3.2.3] 使用的原始年份:', savedOriginalYear);
+                
+                // 🔧 v3.2.3 核心：強制使用原始年份修正所有事件
+                events = events.map(function(event) {
+                    var rocYear = event.rocYear || null;
+                    
+                    console.log('🔍 處理事件:', event.title, '原始 startDateTime:', event.startDateTime);
+                    
+                    if (event.startDateTime) {
+                        event.startDateTime = fixMinguoYearInDate(event.startDateTime, rocYear);
+                        // 🔧 使用保存的原始年份強制修正
+                        event.startDateTime = fixWesternYearInDate(event.startDateTime, savedOriginalYear);
+                        console.log('✅ 修正後 startDateTime:', event.startDateTime);
+                    }
+                    if (event.endDateTime) {
+                        event.endDateTime = fixMinguoYearInDate(event.endDateTime, rocYear);
+                        event.endDateTime = fixWesternYearInDate(event.endDateTime, savedOriginalYear);
+                    }
+                    return event;
+                });
+                handleParseResult(events);
+            })
+            .catch(function(error) {
+                console.error('Gemini 錯誤:', error);
+                showToast('❌ AI 解析失敗，改用內建解析', 'error');
+                handleParseResult(parseWithBuiltIn(scheduleText));
+            });
+        }
+
+        function parseWithBuiltIn(text) {
+            if (!text) return [];
+            text = convertMinguoToWestern(text);
+            var events = [];
+            var lines = text.split('\n');
+            var currentEvent = null;
+            var now = new Date();
+            var fullDateTimeRegex = /(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})[日]?.*?(\d{1,2}):(\d{2})\s*[-~至到]\s*(\d{1,2}):(\d{2})/;
+            var dateTimeRegex = /(\d{1,2})[\/\-月](\d{1,2})[日]?.*?(\d{1,2}):(\d{2})\s*[-~至到]\s*(\d{1,2}):(\d{2})/;
+            var fullDateOnlyRegex = /(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})[日]?/;
+
+            lines.forEach(function(line) {
+                line = line.trim();
+                if (!line) return;
+                var fullDateTimeMatch = line.match(fullDateTimeRegex);
+                var fullDateOnlyMatch = line.match(fullDateOnlyRegex);
+
+                if (fullDateTimeMatch) {
+                    if (currentEvent && currentEvent.title) events.push(currentEvent);
+                    var year = parseInt(fullDateTimeMatch[1]);
+                    var month = parseInt(fullDateTimeMatch[2]);
+                    var day = parseInt(fullDateTimeMatch[3]);
+                    currentEvent = {
+                        title: '', location: '', description: '',
+                        startDateTime: year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0') + 'T' + String(parseInt(fullDateTimeMatch[4])).padStart(2, '0') + ':' + fullDateTimeMatch[5] + ':00',
+                        endDateTime: year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0') + 'T' + String(parseInt(fullDateTimeMatch[6])).padStart(2, '0') + ':' + fullDateTimeMatch[7] + ':00'
+                    };
+                } else if (fullDateOnlyMatch && !currentEvent) {
+                    var year = parseInt(fullDateOnlyMatch[1]);
+                    var month = parseInt(fullDateOnlyMatch[2]);
+                    var day = parseInt(fullDateOnlyMatch[3]);
+                    currentEvent = {
+                        title: '', location: '', description: '',
+                        startDateTime: year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0') + 'T09:00:00',
+                        endDateTime: year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0') + 'T12:00:00'
+                    };
+                } else if (currentEvent) {
+                    if (line.includes('地點') || line.includes('場地')) {
+                        currentEvent.location = line.replace(/地點[:：]?\s*/, '').replace(/場地[:：]?\s*/, '');
+                    } else if (!currentEvent.title && line.length > 2) {
+                        currentEvent.title = line;
+                    } else if (currentEvent.title) {
+                        currentEvent.description += line + '\n';
+                    }
+                }
+            });
+            if (currentEvent && currentEvent.title) events.push(currentEvent);
+            return events;
+        }
+
+        function displayEvents(events) {
+            var container = document.getElementById('eventsPreview');
+            var html = '';
+            var weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+            events.forEach(function(event, index) {
+                var startDate = new Date(event.startDateTime);
+                var endDate = new Date(event.endDateTime);
+                html += '<div class="event-item" id="event_' + index + '">';
+                html += '<div class="event-title">' + (event.title || '未命名事件') + '</div>';
+                html += '<div class="event-meta">';
+                html += '<div class="event-meta-item">📅 ' + formatDate(startDate) + '<span class="day-badge">週' + weekdays[startDate.getDay()] + '</span></div>';
+                html += '<div class="event-meta-item">⏰ ' + formatTime(startDate) + ' - ' + formatTime(endDate) + '</div>';
+                if (event.location) html += '<div class="event-meta-item">📍 ' + event.location + '</div>';
+                html += '</div></div>';
+            });
+            container.innerHTML = html;
+            document.getElementById('homeEventList').innerHTML = html || '<div class="empty-state"><div class="empty-icon">📭</div><div>尚無待處理事件</div></div>';
+        }
+
+        function formatDate(date) { return date.getFullYear() + '/' + String(date.getMonth() + 1).padStart(2, '0') + '/' + String(date.getDate()).padStart(2, '0'); }
+        function formatTime(date) { return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0'); }
+
+        function downloadICS() {
+            if (parsedEvents.length === 0) { showToast('❌ 沒有可匯出的事件', 'error'); return; }
+            var reminders = [];
+            document.querySelectorAll('#reminderGrid .reminder-option.checked input').forEach(function(input) { reminders.push(parseInt(input.value)); });
+            var icsContent = 'BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Workshop Mobile//EN\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\n';
+            parsedEvents.forEach(function(event, index) {
+                var startDate = new Date(event.startDateTime);
+                var endDate = new Date(event.endDateTime);
+                var now = new Date();
+                icsContent += 'BEGIN:VEVENT\nUID:workshop-' + index + '-' + Date.now() + '@mobile\n';
+                icsContent += 'DTSTAMP:' + formatICSDate(now) + '\nDTSTART:' + formatICSDate(startDate) + '\nDTEND:' + formatICSDate(endDate) + '\n';
+                icsContent += 'SUMMARY:' + escapeICS(event.title) + '\n';
+                if (event.location) icsContent += 'LOCATION:' + escapeICS(event.location) + '\n';
+                if (event.description) icsContent += 'DESCRIPTION:' + escapeICS(event.description) + '\n';
+                reminders.forEach(function(mins) { icsContent += 'BEGIN:VALARM\nTRIGGER:-PT' + mins + 'M\nACTION:DISPLAY\nDESCRIPTION:研習提醒\nEND:VALARM\n'; });
+                icsContent += 'END:VEVENT\n';
+            });
+            icsContent += 'END:VCALENDAR';
+            var blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+            var link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = '研習行事曆_' + formatDate(new Date()).replace(/\//g, '') + '.ics';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('✅ ICS 檔案已下載', 'success');
+            var hasLineSettings = document.getElementById('lineChannelAccessToken').value.trim() && document.getElementById('lineUserId').value.trim() && document.getElementById('gasWebAppUrl').value.trim() && document.getElementById('gasSecretKey').value.trim();
+            if (hasLineSettings && getSelectedLineReminders().length > 0) { setTimeout(function() { createReminderSchedules(parsedEvents); }, 500); }
+        }
+
+        function formatICSDate(date) { return date.getFullYear() + String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0') + 'T' + String(date.getHours()).padStart(2, '0') + String(date.getMinutes()).padStart(2, '0') + String(date.getSeconds()).padStart(2, '0'); }
+        function escapeICS(text) { if (!text) return ''; return text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n'); }
+
+        function gapiLoaded() { if (typeof gapi !== 'undefined') gapi.load('client', initializeGapiClient); }
+        async function initializeGapiClient() {
+            try {
+                await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
+                if (!gapi.client.calendar) { try { await gapi.client.load('calendar', 'v3'); } catch (e) {} }
+                gapiInited = true;
+                restoreCachedToken();
+                maybeEnableCalendarButton();
+            } catch (error) {
+                try { await gapi.client.load('calendar', 'v3'); gapiInited = true; maybeEnableCalendarButton(); } catch (e2) {}
+            }
+        }
+
+        function gisLoaded() {
+            var clientIdInput = document.getElementById('googleClientId');
+            if (clientIdInput && clientIdInput.value.trim()) initTokenClient(clientIdInput.value.trim());
+            if (clientIdInput) clientIdInput.addEventListener('change', function() { if (this.value.trim()) initTokenClient(this.value.trim()); });
+        }
+
+        function initTokenClient(clientId) {
+            if (typeof google === 'undefined' || !google.accounts) return;
+            tokenClient = google.accounts.oauth2.initTokenClient({ client_id: clientId, scope: SCOPES, callback: '' });
+            gisInited = true;
+            restoreCachedToken();
+            maybeEnableCalendarButton();
+        }
+
+        function maybeEnableCalendarButton() {
+            var authBtn = document.getElementById('googleAuthBtn');
+            if (authBtn && gapiInited && gisInited) {
+                authBtn.disabled = false;
+                authBtn.classList.remove('disabled');
+                if (accessToken && isCachedTokenValid()) updateAuthButtonStatus(true);
+            }
+        }
+
+        function saveCachedToken(token) { try { localStorage.setItem(TOKEN_CACHE_KEY, token); localStorage.setItem(TOKEN_EXPIRY_KEY, (Date.now() + TOKEN_CACHE_DURATION).toString()); } catch (e) {} }
+        function restoreCachedToken() {
+            try {
+                var cachedToken = localStorage.getItem(TOKEN_CACHE_KEY);
+                var expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
+                if (cachedToken && expiry && Date.now() < parseInt(expiry)) {
+                    accessToken = cachedToken;
+                    if (gapiInited && typeof gapi !== 'undefined') gapi.client.setToken({ access_token: cachedToken });
+                    updateAuthButtonStatus(true, Math.round((parseInt(expiry) - Date.now()) / 3600000 * 10) / 10);
+                    return true;
+                } else { clearCachedToken(); }
+            } catch (e) {}
+            return false;
+        }
+        function isCachedTokenValid() { try { var expiry = localStorage.getItem(TOKEN_EXPIRY_KEY); return expiry && Date.now() < parseInt(expiry); } catch (e) {} return false; }
+        function clearCachedToken() { try { localStorage.removeItem(TOKEN_CACHE_KEY); localStorage.removeItem(TOKEN_EXPIRY_KEY); accessToken = null; } catch (e) {} }
+        function getCachedTokenRemainingTime() { try { var expiry = localStorage.getItem(TOKEN_EXPIRY_KEY); if (expiry) { var remaining = parseInt(expiry) - Date.now(); if (remaining > 0) return Math.round(remaining / 3600000 * 10) / 10; } } catch (e) {} return 0; }
+
+        function handleGoogleAuth() {
+            var clientId = document.getElementById('googleClientId').value.trim();
+            if (!clientId) { showToast('⚠️ 請先輸入 Google OAuth Client ID', 'error'); return; }
+            if (!tokenClient) initTokenClient(clientId);
+            if (!tokenClient) { showToast('❌ Google 授權服務未就緒', 'error'); return; }
+            if (accessToken && isCachedTokenValid()) { showToast('✅ 授權仍有效（剩餘 ' + getCachedTokenRemainingTime() + ' 小時）', 'success'); return; }
+            showToast('🔐 正在開啟 Google 授權...', 'info');
+            tokenClient.callback = function(response) {
+                if (response.error !== undefined) { showToast('❌ 授權失敗: ' + response.error, 'error'); return; }
+                var token = gapi.client.getToken();
+                if (token && token.access_token) { accessToken = token.access_token; saveCachedToken(accessToken); showToast('✅ Google 日曆授權成功！', 'success'); updateAuthButtonStatus(true); }
+            };
+            tokenClient.requestAccessToken({ prompt: gapi.client.getToken() === null ? 'consent' : '' });
+        }
+
+        function updateAuthButtonStatus(authorized, remainingHours) {
+            var authBtn = document.getElementById('googleAuthBtn');
+            var authStatus = document.getElementById('googleAuthStatus');
+            if (authorized) {
+                if (authBtn) { authBtn.innerHTML = '✅ 已授權'; authBtn.classList.add('authorized'); }
+                if (authStatus) { authStatus.innerHTML = '✅ 已授權（剩餘 ' + (remainingHours || getCachedTokenRemainingTime()) + ' 小時）'; authStatus.style.color = 'var(--emerald)'; }
+            } else {
+                if (authBtn) { authBtn.innerHTML = '🔑 授權 Google'; authBtn.classList.remove('authorized'); }
+                if (authStatus) { authStatus.innerHTML = '❌ 未授權'; authStatus.style.color = 'var(--red)'; }
+            }
+        }
+
+        function handleGoogleSignOut() {
+            if (accessToken && typeof google !== 'undefined' && google.accounts) google.accounts.oauth2.revoke(accessToken, function() {});
+            if (typeof gapi !== 'undefined' && gapi.client) gapi.client.setToken(null);
+            clearCachedToken();
+            updateAuthButtonStatus(false);
+            showToast('✅ 已登出 Google 帳號', 'success');
+        }
+
+        function showApiDiagnostics() {
+            var info = ['═══ API 診斷報告 ═══', '', 'gapi: ' + (typeof gapi !== 'undefined' ? '✅' : '❌'), 'gapi.client: ' + (typeof gapi !== 'undefined' && gapi.client ? '✅' : '❌'), 'gapiInited: ' + gapiInited, 'gisInited: ' + gisInited, 'accessToken: ' + (accessToken ? '✅' : '❌'), 'Token 有效: ' + isCachedTokenValid()];
+            alert(info.join('\n'));
+        }
+
+        async function importToGoogleCalendar() {
+            if (parsedEvents.length === 0) { showToast('❌ 沒有可匯入的事件', 'error'); return; }
+            if (!accessToken || !isCachedTokenValid()) { showToast('⚠️ 請先授權 Google 日曆', 'error'); return; }
+            if (typeof gapi === 'undefined' || !gapi.client) { showToast('❌ Google API 未載入', 'error'); return; }
+            gapi.client.setToken({ access_token: accessToken });
+            if (!gapi.client.calendar) { try { await gapi.client.load('calendar', 'v3'); } catch (e) { showToast('❌ Calendar API 載入失敗', 'error'); return; } }
+            showToast('📤 正在匯入到 Google 日曆...', 'info');
+            var successCount = 0, failCount = 0;
+            var reminders = [];
+            document.querySelectorAll('#reminderGrid .reminder-option.checked input').forEach(function(input) { reminders.push(parseInt(input.value)); });
+            for (var i = 0; i < parsedEvents.length; i++) {
+                var event = parsedEvents[i];
+                try {
+                    await gapi.client.calendar.events.insert({
+                        calendarId: 'primary',
+                        resource: {
+                            summary: event.title, location: event.location || '', description: event.description || '',
+                            start: { dateTime: event.startDateTime, timeZone: 'Asia/Taipei' },
+                            end: { dateTime: event.endDateTime, timeZone: 'Asia/Taipei' },
+                            reminders: { useDefault: false, overrides: reminders.map(function(mins) { return { method: 'popup', minutes: mins }; }) }
+                        }
+                    });
+                    successCount++;
+                } catch (error) {
+                    failCount++;
+                    if (error.status === 401) { clearCachedToken(); updateAuthButtonStatus(false); return; }
+                }
+            }
+            if (successCount > 0) {
+                showToast('✅ 成功匯入 ' + successCount + ' 個事件！', 'success');
+                var hasLineSettings = document.getElementById('lineChannelAccessToken').value.trim() && document.getElementById('lineUserId').value.trim() && document.getElementById('gasWebAppUrl').value.trim() && document.getElementById('gasSecretKey').value.trim();
+                if (hasLineSettings && getSelectedLineReminders().length > 0) setTimeout(function() { createReminderSchedules(parsedEvents); }, 500);
+                setTimeout(function() {
+                    parsedEvents = [];
+                    document.getElementById('eventCount').textContent = '0';
+                    document.getElementById('eventsPreview').innerHTML = '';
+                    document.getElementById('eventsPreview').style.display = 'none';
+                    document.getElementById('homeEventList').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div>尚無待處理事件</div></div>';
+                    document.getElementById('importActions').style.display = 'none';
+                }, 1500);
+            }
+            if (failCount > 0) showToast('⚠️ ' + failCount + ' 個事件匯入失敗', 'error');
+        }
+
+        function updateLineStatus() {
+            var token = document.getElementById('lineChannelAccessToken').value.trim();
+            var userId = document.getElementById('lineUserId').value.trim();
+            var gasUrl = document.getElementById('gasWebAppUrl').value.trim();
+            var gasSecret = document.getElementById('gasSecretKey').value.trim();
+            updateStatus('token', token); updateStatus('userId', userId); updateStatus('gas', gasUrl); updateStatus('secret', gasSecret);
+        }
+        function updateStatus(name, value) {
+            var statusEl = document.getElementById(name + 'Status');
+            var iconEl = document.getElementById(name + 'Icon');
+            if (value) { statusEl.textContent = '已設定 (' + value.substring(0, 8) + '...)'; iconEl.textContent = '✅'; }
+            else { statusEl.textContent = '未設定'; iconEl.textContent = '❌'; }
+        }
+
+        function testLineNotification() {
+            var token = document.getElementById('lineChannelAccessToken').value.trim();
+            var userId = document.getElementById('lineUserId').value.trim();
+            var gasUrl = document.getElementById('gasWebAppUrl').value.trim();
+            var gasSecret = document.getElementById('gasSecretKey').value.trim();
+            if (!token || !userId || !gasUrl || !gasSecret) { showToast('⚠️ 請先填寫完整的 LINE 設定', 'error'); return; }
+            showToast('📨 正在發送測試訊息...', 'info');
+            var tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(9, 0, 0, 0);
+            fetch(gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ secret: gasSecret, token: token, userId: userId, workshops: [{ title: '📚 測試研習', startDateTime: tomorrow.toISOString(), endDateTime: new Date(tomorrow.getTime() + 10800000).toISOString(), location: '測試地點', description: '測試通知' }] }) })
+            .then(function(r) { return r.json(); })
+            .then(function(result) { showToast(result.success ? '✅ 測試訊息已發送！' : '❌ 發送失敗', result.success ? 'success' : 'error'); })
+            .catch(function(error) { showToast('❌ 發送失敗：' + error.message, 'error'); });
+        }
+
+        function viewScheduledReminders() {
+            var gasUrl = document.getElementById('gasWebAppUrl').value.trim();
+            var gasSecret = document.getElementById('gasSecretKey').value.trim();
+            if (!gasUrl || !gasSecret) { showToast('⚠️ 請先設定 GAS URL 和 Secret Key', 'error'); return; }
+            showToast('📋 正在查詢排程...', 'info');
+            fetch(gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'getSchedules', secret: gasSecret }) })
+            .then(function(r) { return r.json(); })
+            .then(function(result) {
+                if (result.success) {
+                    var schedules = result.schedules || [];
+                    if (schedules.length === 0) { showToast('📭 目前沒有排程', 'info'); alert('📭 目前沒有排程'); }
+                    else {
+                        var pending = schedules.filter(function(s) { return s.status === 'pending'; });
+                        var msg = '📋 排程清單\n⏳ 待發送: ' + pending.length + ' 筆\n';
+                        pending.slice(0, 10).forEach(function(s, i) { msg += (i + 1) + '. ' + s.workshopTitle + ' - ' + s.reminderLabel + '\n'; });
+                        showToast('✅ 查詢成功', 'success');
+                        alert(msg);
+                    }
+                } else { showToast('❌ 查詢失敗', 'error'); }
+            })
+            .catch(function(error) { showToast('❌ 查詢失敗：' + error.message, 'error'); });
+        }
+
+        function clearAllReminders() {
+            if (!confirm('⚠️ 確定要清除所有排程嗎？')) return;
+            var gasUrl = document.getElementById('gasWebAppUrl').value.trim();
+            var gasSecret = document.getElementById('gasSecretKey').value.trim();
+            if (!gasUrl || !gasSecret) { showToast('⚠️ 請先設定 GAS URL 和 Secret Key', 'error'); return; }
+            fetch(gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'clearSchedules', secret: gasSecret }) })
+            .then(function(r) { return r.json(); })
+            .then(function(result) { showToast(result.success ? '✅ 已清除所有排程' : '❌ 清除失敗', result.success ? 'success' : 'error'); })
+            .catch(function(error) { showToast('❌ 清除失敗：' + error.message, 'error'); });
+        }
+
+        function createReminderSchedules(workshops) {
+            var token = document.getElementById('lineChannelAccessToken').value.trim();
+            var userId = document.getElementById('lineUserId').value.trim();
+            var gasUrl = document.getElementById('gasWebAppUrl').value.trim();
+            var gasSecret = document.getElementById('gasSecretKey').value.trim();
+            if (!token || !userId || !gasUrl || !gasSecret) return;
+            var reminderMinutes = getSelectedLineReminders();
+            if (reminderMinutes.length === 0) return;
+            var schedules = [];
+            workshops.forEach(function(workshop) {
+                var startTime = new Date(workshop.startDateTime);
+                var meetLink = '';
+                var allText = (workshop.location || '') + ' ' + (workshop.description || '');
+                var meetMatch = allText.match(/https?:\/\/meet\.google\.com\/[a-z\-]+/i);
+                if (meetMatch) meetLink = meetMatch[0];
+                reminderMinutes.forEach(function(mins) {
+                    var reminderTime = new Date(startTime.getTime() - mins * 60 * 1000);
+                    if (reminderTime > new Date()) {
+                        schedules.push({ workshopTitle: workshop.title, workshopStart: workshop.startDateTime, workshopEnd: workshop.endDateTime, workshopLocation: workshop.location || '', meetLink: meetLink, workshopDescription: workshop.description || '', reminderTime: reminderTime.toISOString(), reminderMinutes: mins, reminderLabel: getReminderLabel(mins), status: 'pending' });
+                    }
+                });
+            });
+            if (schedules.length === 0) return;
+            fetch(gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'createSchedules', secret: gasSecret, token: token, userId: userId, schedules: schedules }) })
+            .then(function(r) { return r.json(); })
+            .then(function(result) { if (result.success) showToast('✅ 已建立 ' + (result.count || schedules.length) + ' 個提醒排程', 'success'); })
+            .catch(function(error) { console.error('排程建立錯誤:', error); });
+        }
+
+        function getSelectedLineReminders() {
+            var reminders = [];
+            document.querySelectorAll('#lineReminderGrid input[type="checkbox"]').forEach(function(cb) { if (cb.checked) reminders.push(parseInt(cb.value)); });
+            return reminders;
+        }
+
+        function getReminderLabel(minutes) {
+            if (minutes >= 1440) return '前 ' + Math.floor(minutes / 1440) + ' 天';
+            if (minutes >= 60) return '前 ' + Math.floor(minutes / 60) + ' 小時';
+            return '前 ' + minutes + ' 分鐘';
+        }
+
+        function toggleLocalStorage() {
+            var toggle = document.getElementById('localStorageToggle');
+            if (toggle.classList.contains('active')) {
+                if (confirm('確定要停用本機儲存嗎？')) { toggle.classList.remove('active'); localStorageEnabled = false; localStorage.removeItem(STORAGE_PREFIX + 'enabled'); showToast('✅ 已停用本機儲存', 'success'); }
+            } else {
+                if (confirm('⚠️ 啟用後設定會存在本機，確定嗎？')) { toggle.classList.add('active'); localStorageEnabled = true; localStorage.setItem(STORAGE_PREFIX + 'enabled', 'true'); saveSettings(); showToast('✅ 已啟用本機儲存', 'success'); }
+            }
+        }
+
+        function saveSettings() {
+            if (!localStorageEnabled) return;
+            try {
+                localStorage.setItem(STORAGE_PREFIX + 'geminiApiKey', document.getElementById('geminiApiKey').value);
+                localStorage.setItem(STORAGE_PREFIX + 'googleClientId', document.getElementById('googleClientId').value);
+                localStorage.setItem(STORAGE_PREFIX + 'lineToken', document.getElementById('lineChannelAccessToken').value);
+                localStorage.setItem(STORAGE_PREFIX + 'lineUserId', document.getElementById('lineUserId').value);
+                localStorage.setItem(STORAGE_PREFIX + 'gasUrl', document.getElementById('gasWebAppUrl').value);
+                localStorage.setItem(STORAGE_PREFIX + 'gasSecret', document.getElementById('gasSecretKey').value);
+            } catch (e) {}
+        }
+
+        function loadSettings() {
+            try {
+                if (localStorage.getItem(STORAGE_PREFIX + 'enabled') === 'true') {
+                    localStorageEnabled = true;
+                    document.getElementById('localStorageToggle').classList.add('active');
+                    var geminiKey = localStorage.getItem(STORAGE_PREFIX + 'geminiApiKey');
+                    var googleId = localStorage.getItem(STORAGE_PREFIX + 'googleClientId');
+                    var lineToken = localStorage.getItem(STORAGE_PREFIX + 'lineToken');
+                    var lineUserId = localStorage.getItem(STORAGE_PREFIX + 'lineUserId');
+                    var gasUrl = localStorage.getItem(STORAGE_PREFIX + 'gasUrl');
+                    var gasSecret = localStorage.getItem(STORAGE_PREFIX + 'gasSecret');
+                    if (geminiKey) document.getElementById('geminiApiKey').value = geminiKey;
+                    if (googleId) document.getElementById('googleClientId').value = googleId;
+                    if (lineToken) document.getElementById('lineChannelAccessToken').value = lineToken;
+                    if (lineUserId) document.getElementById('lineUserId').value = lineUserId;
+                    if (gasUrl) document.getElementById('gasWebAppUrl').value = gasUrl;
+                    if (gasSecret) document.getElementById('gasSecretKey').value = gasSecret;
+                    if (googleId) setTimeout(function() { if (typeof google !== 'undefined' && google.accounts) initTokenClient(googleId); }, 1000);
+                }
+                setTimeout(function() { restoreCachedToken(); }, 1500);
+            } catch (e) {}
+        }
+
+        function clearScheduleText() {
+            var textarea = document.getElementById('scheduleText');
+            if (textarea.value.trim()) { if (confirm('確定要清除輸入的文字嗎？')) { textarea.value = ''; showToast('✅ 已清除文字', 'success'); } }
+            else { showToast('📝 輸入區已經是空的', 'info'); }
+        }
+
+        function clearAllData() {
+            if (!confirm('⚠️ 確定要清除所有資料嗎？')) return;
+            try { Object.keys(localStorage).forEach(function(key) { if (key.startsWith(STORAGE_PREFIX)) localStorage.removeItem(key); }); } catch (e) {}
+            document.getElementById('geminiApiKey').value = '';
+            document.getElementById('googleClientId').value = '';
+            document.getElementById('lineChannelAccessToken').value = '';
+            document.getElementById('lineUserId').value = '';
+            document.getElementById('gasWebAppUrl').value = '';
+            document.getElementById('gasSecretKey').value = '';
+            document.getElementById('scheduleText').value = '';
+            document.getElementById('localStorageToggle').classList.remove('active');
+            localStorageEnabled = false;
+            parsedEvents = [];
+            uploadedFilesContentArray = [];
+            uploadedImagesArray = [];
+            document.getElementById('eventsPreview').innerHTML = '';
+            document.getElementById('eventsPreview').style.display = 'none';
+            document.getElementById('importActions').style.display = 'none';
+            document.getElementById('eventCount').textContent = '0';
+            document.getElementById('fileCount').textContent = '0';
+            showToast('✅ 所有資料已清除', 'success');
+        }
+
+        document.querySelectorAll('.input-field').forEach(function(input) {
+            input.addEventListener('change', function() { if (localStorageEnabled) saveSettings(); });
+        });
+
+        (function() {
+            var splash = document.getElementById('splashScreen');
+            var minDisplayTime = 3800;
+            var startTime = Date.now();
+            function hideSplash() {
+                var elapsed = Date.now() - startTime;
+                var remaining = Math.max(0, minDisplayTime - elapsed);
+                setTimeout(function() {
+                    splash.classList.add('hide');
+                    setTimeout(function() { splash.style.display = 'none'; }, 800);
+                }, remaining);
+            }
+            if (document.readyState === 'complete') hideSplash();
+            else window.addEventListener('load', hideSplash);
+        })();
+    </script>
+</body>
+</html>
